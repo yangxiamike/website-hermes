@@ -26,6 +26,7 @@ http://127.0.0.1:4173/index.html
 - ball-valve.html
 - factory.html
 - quality.html
+- before-after.html
 
 ## Status
 
