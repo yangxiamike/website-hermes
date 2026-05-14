@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./report_done <task_id> [status] [completed_items] [issues] [next_step] [decision]
+
+Examples:
+  ./report_done t_28efebd6
+  ./report_done t_28efebd6 "Conditional Pass" "完成首页和产品页迭代" "移动端还需微调" "继续做 QA 截图检查" "无"
+
+Options:
+  --dry-run    Print payload only, do not send
+
+Environment:
+  FEISHU_WEBHOOK_URL   Required unless --dry-run is used
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+dry_run="false"
+if [[ "${1:-}" == "--dry-run" ]]; then
+  dry_run="true"
+  shift
+fi
+
+task_id="${1:-}"
+status="${2:-阶段性任务完成}"
+completed="${3:-已完成任务 ${task_id}}"
+issues="${4:-无}"
+next_step="${5:-继续按默认流程推进下一轮资产优化}"
+decision="${6:-无}"
+
+if [[ -z "$task_id" ]]; then
+  echo "Error: task_id is required."
+  usage
+  exit 1
+fi
+
+today="$(date '+%Y-%m-%d')"
+title="Hermes 工作汇报 | ${task_id} | ${today}"
+
+content=$'Hermes 工作汇报\n\n'
+content+=$'当前状态：\n'"${status}"$'\n\n'
+content+=$'完成事项：\n'"${completed}"$'\n\n'
+content+=$'发现问题：\n'"${issues}"$'\n\n'
+content+=$'下一步默认推进：\n'"${next_step}"$'\n\n'
+content+=$'需要创始人拍板：\n'"${decision}"$'\n\n'
+content+=$'风险提醒：\n无'
+
+escaped_title="$(printf '%s' "$title" | perl -pe 's/\\/\\\\/g; s/"/\\"/g')"
+escaped_content="$(printf '%s' "$content" | perl -0777 -pe 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g')"
+
+json_payload="$(printf '{"msg_type":"post","content":{"post":{"zh_cn":{"title":"%s","content":[[{"tag":"text","text":"%s"}]]}}}}' \
+  "$escaped_title" \
+  "$escaped_content")"
+
+if [[ "$dry_run" == "true" ]]; then
+  echo "$json_payload"
+  exit 0
+fi
+
+if [[ -z "${FEISHU_WEBHOOK_URL:-}" ]]; then
+  echo "Error: FEISHU_WEBHOOK_URL is not set."
+  echo "Tip: export FEISHU_WEBHOOK_URL='https://open.feishu.cn/open-apis/bot/v2/hook/xxxx'"
+  exit 1
+fi
+
+resp="$(curl -sS -X POST "$FEISHU_WEBHOOK_URL" \
+  -H 'Content-Type: application/json' \
+  -d "$json_payload")"
+
+echo "Feishu response: $resp"
